@@ -1,81 +1,124 @@
-CREATE DATABASE IF NOT EXISTS reservation_system;
-USE reservation_system;
+CREATE TYPE user_role AS ENUM (
+  'student',
+  'staff',
+  'admin'
+);
+CREATE TYPE equipment_category AS ENUM (
+  'vr_ar',
+  'robotics',
+  'audio_video',
+  'laboratory',
+  'computing',
+  'iot_embedded'
+);
+CREATE TYPE equipment_status AS ENUM (
+  'available',
+  'reserved',
+  'checked_out',
+  'pending_return',
+  'maintenance'
+);
 
-DROP TABLE IF EXISTS logs;
-DROP TABLE IF EXISTS booking;
-DROP TABLE IF EXISTS equipment;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS roles;
+CREATE TYPE reservation_status AS ENUM (
+  'approved',
+  'active',
+  'completed',
+  'cancelled'
+);
 
-CREATE TABLE roles(
-id INT NOT NULL AUTO_INCREMENT,
-role_name ENUM('student', 'admin', 'staff'),
-
-PRIMARY KEY (id)
-) ENGINE=InnoDB;
+CREATE TYPE log_action AS ENUM (
+  'reserve',
+  'checkout',
+  'return_scan',
+  'admin_confirm_return',
+  'cancel',
+  'maintenance'
+);
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS equipment CASCADE;
+DROP TABLE IF EXISTS reservations CASCADE;
+DROP TABLE IF EXISTS equipment_logs CASCADE;
 
 CREATE TABLE users (
-id INT NOT NULL AUTO_INCREMENT,
-full_name VARCHAR(100) NOT NULL,
-student_number VARCHAR(50) UNIQUE,
-email VARCHAR(255) UNIQUE NOT NULL,
-id_role INT NOT NULL,
-phone_number VARCHAR(20),
-is_active BOOLEAN NOT NULL DEFAULT TRUE,
-password_hash VARCHAR(255) NOT NULL,
+  id SERIAL PRIMARY KEY,
 
-PRIMARY KEY (id),
+  first_name VARCHAR(50) NOT NULL,
+  last_name VARCHAR(50) NOT NULL,
 
-FOREIGN KEY(id_role) REFERENCES roles(id) ON DELETE RESTRICT
-) ENGINE=InnoDB;
+  email VARCHAR(100) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
 
-CREATE TABLE equipment(
-id INT NOT NULL AUTO_INCREMENT,
-equipment_name VARCHAR(100) NOT NULL,
-equipment_description TEXT,
-equipment_status ENUM('available', 'in_use', 'maintenance', 'retired') NOT NULL DEFAULT 'available',
-image_url VARCHAR(500),
-serial_number VARCHAR(100) UNIQUE NOT NULL,
-id_category INT UNSIGNED,
-scan_code VARCHAR(100) UNIQUE NOT NULL,
-current_holder_id INT,
-location VARCHAR(100),
+  role user_role NOT NULL,
 
-PRIMARY KEY(id),
+  is_active BOOLEAN DEFAULT TRUE,
 
-FOREIGN KEY(current_holder_id) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB;
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
 
-CREATE TABLE booking(
-id INT NOT NULL AUTO_INCREMENT,
-id_user INT NOT NULL,
-id_equipment INT NOT NULL,
-start_time DATETIME NOT NULL,
-end_time  DATETIME NOT NULL,
-status ENUM('pending', 'confirmed', 'active', 'completed', 'cancelled', 'no_show') NOT NULL DEFAULT 'pending',
-checked_out_at DATETIME NULL,
-checked_in_at DATETIME NULL,
-
-PRIMARY KEY(id),
-
-FOREIGN KEY(id_user) REFERENCES users(id) ON DELETE RESTRICT,
-FOREIGN KEY(id_equipment) REFERENCES equipment(id) ON DELETE RESTRICT,
-
-CONSTRAINT check_time CHECK(end_time>start_time)
-) ENGINE=InnoDB;
-
-CREATE TABLE logs (
-  id BIGINT UNSIGNED AUTO_INCREMENT,
-  user_id INT,
-  action VARCHAR(50) NOT NULL, 
-  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  entity_type VARCHAR(50),
-  entity_id INT,
+CREATE TABLE equipment (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  category equipment_category NOT NULL,
   description TEXT,
-  PRIMARY KEY (id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB;
+  location VARCHAR(100),
 
-CREATE INDEX index_scan_code ON equipment(scan_code);
-CREATE INDEX index_user_email ON users(email);
-CREATE INDEX index_logs_timestamp ON logs(timestamp);
+  qr_code VARCHAR(100) UNIQUE NOT NULL,
+
+  status equipment_status DEFAULT 'available',
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+
+);
+
+CREATE TABLE reservations (
+  id SERIAL PRIMARY KEY,
+
+  user_id INT NOT NULL,
+  equipment_id INT NOT NULL,
+
+  start_time TIMESTAMP NOT NULL,
+  end_time TIMESTAMP NOT NULL,
+
+  status reservation_status DEFAULT 'approved',
+
+  checkout_time TIMESTAMP,
+  return_time TIMESTAMP,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT fk_res_user
+    FOREIGN KEY (user_id)
+    REFERENCES users(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_res_equipment
+    FOREIGN KEY (equipment_id)
+    REFERENCES equipment(id)
+    ON DELETE CASCADE
+);
+
+CREATE TABLE equipment_logs (
+  id SERIAL PRIMARY KEY,
+
+  equipment_id INT NOT NULL,
+  user_id INT,
+
+  action log_action NOT NULL,
+
+  status_before equipment_status,
+  status_after equipment_status,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT fk_log_equipment
+    FOREIGN KEY (equipment_id)
+    REFERENCES equipment(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_log_user
+    FOREIGN KEY (user_id)
+    REFERENCES users(id)
+    ON DELETE SET NULL
+);
